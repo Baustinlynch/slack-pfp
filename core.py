@@ -112,6 +112,17 @@ DEFAULT_CONFIG = {
         },
     ],
     "custom_overlays": [],
+    "school": {
+        "enabled": False,
+        "days": [0, 1, 2, 3, 4],  # 0=Mon … 6=Sun
+        "start": "08:30",         # HH:MM, server-local time
+        "end": "15:30",
+        "status_text": "",        # OOO status message while in school
+        "status_emoji": "",
+        "auto_reply": "",         # fallback OOO message when status_text is blank; not an auto-reply
+        "music_behavior": "music_over",
+        "holidays": [],           # school holidays: {start, end} full calendar days
+    },
 }
 
 ANCHORS = [
@@ -506,6 +517,97 @@ def active_holidays(cfg: dict, today: datetime | None = None) -> list:
     today = today or datetime.now()
     return [h for h in cfg.get("holidays", [])
             if h.get("enabled") and _date_in_range(today, h["start"], h["end"])]
+
+
+# --------------------------------------------------------------------------- #
+# School mode (OOO while you're in class)
+# --------------------------------------------------------------------------- #
+
+SCHOOL_BEHAVIORS = ("music_over", "music_school", "school_music", "listening")
+
+
+def _hhmm_minutes(value) -> int | None:
+    """'HH:MM' -> minutes since midnight, or None when unparseable."""
+    try:
+        h, m = str(value).split(":")
+        return int(h) * 60 + int(m)
+    except (AttributeError, ValueError):
+        return None
+
+
+def active_school_holidays(cfg: dict, now: datetime | None = None) -> list:
+    """School holidays covering ``now`` (full calendar days, start→end inclusive)."""
+    now = now or datetime.now()
+    today = now.strftime("%Y-%m-%d")
+    return [h for h in (cfg.get("school") or {}).get("holidays", [])
+            if h.get("start") and h.get("end") and h.get("start") <= today <= h.get("end")]
+
+
+def is_school_time(cfg: dict, now: datetime | None = None) -> bool:
+    """True while school OOO applies: enabled, a school day, inside the time
+    window, and not on a school holiday. Server-local time, like holidays."""
+    now = now or datetime.now()
+    school = cfg.get("school") or {}
+    if not school.get("enabled"):
+        return False
+    if active_school_holidays(cfg, now):
+        return False
+    start = _hhmm_minutes(school.get("start"))
+    end = _hhmm_minutes(school.get("end"))
+    if start is None or end is None:
+        return False
+    cur = now.hour * 60 + now.minute
+    wrap = start > end
+    # For an overnight window, the after-midnight leg belongs to the day the
+    # schedule started on (e.g. Mon-only 22:00–02:00 covers Mon 22:00 +
+    # Tue 00:00–02:00, so Tue 01:00 matches the Monday schedule).
+    if wrap and cur <= end:
+        day = (now.weekday() - 1) % 7
+    else:
+        day = now.weekday()
+    if day not in (school.get("days") or []):
+        return False
+    if wrap:
+        return cur >= start or cur <= end
+    return start <= cur <= end
+
+
+def _limit_status(text: str) -> str:
+    if len(text) > STATUS_MAX:
+        return text[:STATUS_MAX - 1].rstrip() + "…"
+    return text
+
+
+def school_status(cfg: dict, playing: bool, song: str = "", artist: str = "",
+                  album: str = "", now: datetime | None = None) -> tuple[str | None, str | None]:
+    """Status + emoji while school OOO is active, else (None, None).
+
+    ``music_behavior`` decides how a playing track mixes with the school message:
+      - music_over:    music status wins while playing, school message otherwise
+      - music_school:  "<music> · <school message>"
+      - school_music:  "<school message> · <music>"
+      - listening:     "<school message> - Listening to Music"
+    """
+    school = cfg.get("school") or {}
+    if not is_school_time(cfg, now):
+        return None, None
+    text = (school.get("status_text") or school.get("auto_reply") or "").strip()
+    emoji = school.get("status_emoji") or ""
+    if not playing:
+        return _limit_status(text), emoji
+    fmt = cfg.get("status_format", "{song} - {artist}")
+    music_emoji = cfg.get("status_emoji", ":musical_note:")
+    music = format_status(fmt, song, artist, album)
+    behavior = school.get("music_behavior", "music_over")
+    if behavior == "music_over":
+        return music, music_emoji or ""
+    if behavior == "music_school":
+        return _limit_status(" · ".join(p for p in (music, text) if p)), music_emoji or ""
+    if behavior == "school_music":
+        return _limit_status(" · ".join(p for p in (text, music) if p)), emoji
+    if behavior == "listening":
+        return _limit_status(f"{text} - Listening to Music" if text else "Listening to Music"), emoji
+    return _limit_status(text), emoji
 
 
 def build_base_image(cfg: dict, default_pfp_path: str, today: datetime | None = None) -> Image.Image:
