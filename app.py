@@ -15,6 +15,7 @@ from io import BytesIO
 from dotenv import load_dotenv
 from flask import (Flask, Response, abort, flash, g, jsonify, redirect,
                    render_template, request, session, url_for)
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 import core
@@ -34,10 +35,11 @@ ALLOWED_EXT = {".png", ".gif", ".webp", ".jpg", ".jpeg"}
 # Per-user overlay quotas (storage decision: Option 1, our disk + quotas).
 MAX_OVERLAYS_PER_USER = 20
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB of stored overlays per user
+MAX_SOURCE_UPLOAD_BYTES = 25 * 1024 * 1024  # resized before being stored
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", os.urandom(32).hex())
-app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5 MB per upload
+app.config["MAX_CONTENT_LENGTH"] = MAX_SOURCE_UPLOAD_BYTES
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
@@ -45,6 +47,12 @@ app.config.update(
 )
 os.makedirs(core.UPLOADS_DIR, exist_ok=True)
 db.init_db()
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def upload_too_large(_error):
+    flash("Image is too large. Upload an image up to 25 MB; it will be resized automatically.")
+    return redirect(request.referrer or url_for("dashboard"))
 
 
 # --------------------------------------------------------------------------- #

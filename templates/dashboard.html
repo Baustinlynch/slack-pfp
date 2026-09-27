@@ -102,6 +102,7 @@
           <div style="flex:1;">
             <form method="post" action="{{ url_for('update_photo') }}" enctype="multipart/form-data">
               <input type="file" name="photo" accept=".png,.gif,.webp,.jpg,.jpeg" required>
+              <div class="meta" style="margin-top:6px;">PNG, GIF, WebP, or JPEG up to 25 MB. Large photos are resized automatically.</div>
               <div style="display:flex; gap:8px; margin-top:10px;">
                 <button type="submit">Upload photo</button>
               </div>
