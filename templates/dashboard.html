@@ -100,18 +100,8 @@
           <img src="{{ url_for('base_png') }}?t={{ state.updated_at or '' }}" alt="base photo"
                style="width:84px; height:84px; border-radius:12px; object-fit:cover; background:#11131a; flex:none;">
           <div style="flex:1;">
-            <form method="post" action="{{ url_for('update_photo') }}" enctype="multipart/form-data">
-              <input type="file" name="photo" accept=".png,.gif,.webp,.jpg,.jpeg" required>
-              <div class="meta" style="margin-top:6px;">PNG, GIF, WebP, or JPEG up to 25 MB. Large photos are resized automatically.</div>
-              <div style="display:flex; gap:8px; margin-top:10px;">
-                <button type="submit">Upload photo</button>
-              </div>
-            </form>
-            {% if cfg.base_photo %}
-            <form method="post" action="{{ url_for('reset_photo') }}" style="margin-top:8px;">
-              <button class="ghost" type="submit">Reset to Slack avatar</button>
-            </form>
-            {% endif %}
+            <a class="btnlink" href="{{ url_for('photo_editor') }}">Edit / upload photo</a>
+            <div class="meta" style="margin-top:8px;">Crop, position, and resize a new profile photo.</div>
           </div>
         </div>
       </div>

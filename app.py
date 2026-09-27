@@ -410,6 +410,17 @@ def delete_school_holiday(hid):
 # Base profile photo (user-supplied; overrides their Slack avatar)
 # --------------------------------------------------------------------------- #
 
+@app.route("/photo")
+@login_required
+def photo_editor():
+    user = current_user()
+    return render_template(
+        "photo_editor.html",
+        has_custom_photo=bool(user.config.get("base_photo")),
+        updated=request.args.get("updated") == "1",
+    )
+
+
 @app.route("/api/photo", methods=["POST"])
 @login_required
 def update_photo():
@@ -417,15 +428,17 @@ def update_photo():
     upload = request.files.get("photo")
     if not upload or not upload.filename:
         flash("Choose an image to upload.")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("photo_editor"))
     saved = _save_upload(user, upload.stream, upload.filename, "base")
     if saved is False:
         flash("Unsupported or invalid image (use PNG/GIF/WebP/JPEG)")
-        return redirect(url_for("dashboard"))
+        return redirect(url_for("photo_editor"))
     user.config["base_photo"] = saved
     save(user)
+    if request.headers.get("X-Photo-Editor") == "1":
+        return {"ok": True}
     flash("Profile photo updated")
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("photo_editor"))
 
 
 @app.route("/api/photo/reset", methods=["POST"])
@@ -438,7 +451,7 @@ def reset_photo():
     user.config["base_photo"] = ""
     save(user)
     flash("Profile photo reset to your Slack avatar")
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("photo_editor"))
 
 
 # --------------------------------------------------------------------------- #
